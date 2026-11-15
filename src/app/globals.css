@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-dm-sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-jetbrains-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --brand-primary: #EA580C;
+  --brand-primary-hover: #C2410C;
+  --brand-primary-light: #FFF7ED;
+  --brand-accent: #F97316;
+  --surface-bg: #FFFCFA;
+  --surface-card: #FFFFFF;
+  --sidebar-bg: #1C1410;
+  --sidebar-text: #FFF7ED;
+  --hero-gradient: radial-gradient(circle at 80% 20%, rgba(234, 88, 12, 0.12), rgba(249, 115, 22, 0.06) 45%, transparent 70%);
+}
+
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+body {
+  font-family: var(--font-dm-sans);
+  background-color: var(--surface-bg);
+  color: #0F172A;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
