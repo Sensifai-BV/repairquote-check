@@ -87,14 +87,37 @@ export default function WorkspacePage() {
   const [generatingKey, setGeneratingKey] = useState(false);
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [keyNoticeMsg, setKeyNoticeMsg] = useState<string | null>(null);
+  const [codeLang, setCodeLang] = useState<"curl" | "node" | "python">("curl");
 
   // Interactive Sandbox State
   const [sandboxTrade, setSandboxTrade] = useState("HVAC");
   const [sandboxCity, setSandboxCity] = useState("Dallas");
+  const [sandboxState, setSandboxState] = useState("TX");
+  const [sandboxTitle, setSandboxTitle] = useState("Heat Pump Compressor Repair");
   const [sandboxAmount, setSandboxAmount] = useState("4850");
   const [sandboxResult, setSandboxResult] = useState<any>(null);
   const [sandboxLoading, setSandboxLoading] = useState(false);
+  const [sandboxLatency, setSandboxLatency] = useState<number | null>(null);
+  const [sandboxStatus, setSandboxStatus] = useState<number | null>(null);
   const [sandboxKey, setSandboxKey] = useState("");
+
+  // Parse URL query parameter ?tab=... on initial mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab");
+      if (
+        tabParam === "api" ||
+        tabParam === "custom" ||
+        tabParam === "negotiate" ||
+        tabParam === "audit"
+      ) {
+        setActiveTab(tabParam as any);
+      } else if (window.location.hash === "#api") {
+        setActiveTab("api");
+      }
+    }
+  }, []);
 
   const loadApiKeys = () => {
     fetch("/api/v1/keys", { cache: "no-store" })
@@ -155,6 +178,9 @@ export default function WorkspacePage() {
   const handleRunSandbox = async () => {
     setSandboxLoading(true);
     setSandboxResult(null);
+    setSandboxLatency(null);
+    setSandboxStatus(null);
+    const startMs = Date.now();
     try {
       const activeRawKey = generatedKey || sandboxKey;
       const res = await fetch("/api/v1/audit", {
@@ -164,14 +190,20 @@ export default function WorkspacePage() {
           Authorization: `Bearer ${activeRawKey}`,
         },
         body: JSON.stringify({
+          title: sandboxTitle,
           trade: sandboxTrade,
           city: sandboxCity,
+          state: sandboxState,
           totalQuoted: Number(sandboxAmount),
         }),
       });
       const data = await res.json();
+      setSandboxLatency(Date.now() - startMs);
+      setSandboxStatus(res.status);
       setSandboxResult(data);
     } catch (err: any) {
+      setSandboxLatency(Date.now() - startMs);
+      setSandboxStatus(500);
       setSandboxResult({ error: err.message });
     } finally {
       setSandboxLoading(false);
@@ -1047,40 +1079,101 @@ export default function WorkspacePage() {
         {activeTab === "api" && (
           <div className="space-y-6">
             <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-6">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">Developer API Hub</h2>
-                <p className="text-xs text-slate-600 mt-1">
-                  Integrate RepairQuote Check fairness verification directly into property management software, warranty claims systems, or tenant portals.
-                </p>
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-bold text-slate-900">Developer REST API Hub</h2>
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      v1.0 Active
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                      Zero Third-Party ID Exposure
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 mt-1">
+                    Integrate automated contractor quote fairness evaluation directly into your property management systems, warranty claim processors, or tenant mobile apps.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <a
+                    href="/api/v1/trades"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-700 transition-colors"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    <span>View /api/v1/trades</span>
+                  </a>
+                </div>
               </div>
 
-              {/* API Keys Table */}
+              {/* Zero-Leakage Guarantee Callout */}
+              <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200/80 flex items-start gap-3">
+                <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-xs">
+                  <div className="font-bold text-emerald-900">
+                    Strict API Key Isolation & Privacy Guarantee
+                  </div>
+                  <p className="text-emerald-800 leading-relaxed">
+                    Every API key is an isolated application-scoped token (format: <code className="font-mono bg-emerald-100 px-1 py-0.5 rounded">rq_live_&lt;hex&gt;</code>). User identity IDs, OIDC client secrets, and platform master credentials are never accepted, stored, or revealed.
+                  </p>
+                </div>
+              </div>
+
+              {/* API Keys Table & Minting */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700 uppercase">Dedicated API Keys</span>
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Application API Keys
+                  </span>
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
                     <input
                       type="text"
                       value={newKeyName}
                       onChange={(e) => setNewKeyName(e.target.value)}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-slate-200 text-slate-800"
-                      placeholder="Key label"
+                      className="px-3 py-1.5 text-xs rounded-xl border border-slate-200 text-slate-800 w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="e.g. Property Management Portal Key"
                     />
                     <button
                       onClick={handleCreateApiKey}
                       disabled={generatingKey}
-                      className="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-semibold"
+                      className="px-4 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-colors shadow-xs disabled:opacity-50"
                     >
-                      {generatingKey ? "Generating..." : "+ New Key"}
+                      {generatingKey ? (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          <span>Minting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>Mint API Key</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
 
                 {keyNoticeMsg && (
-                  <div className="p-3 rounded-lg bg-orange-50 border border-orange-200 text-orange-800 text-xs font-mono">
-                    {keyNoticeMsg}
+                  <div className="p-4 rounded-xl bg-orange-50 border border-orange-200 text-orange-950 text-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold">{keyNoticeMsg}</span>
+                      {generatedKey && (
+                        <button
+                          onClick={() => copyToClipboard(generatedKey)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-200/80 hover:bg-orange-300 text-orange-900 font-semibold text-[11px] transition-colors"
+                        >
+                          <Copy className="h-3 w-3" />
+                          <span>Copy Token</span>
+                        </button>
+                      )}
+                    </div>
                     {generatedKey && (
-                      <div className="mt-1 font-bold text-slate-900 select-all">{generatedKey}</div>
+                      <div className="p-2.5 rounded-lg bg-white border border-orange-200 font-mono text-xs select-all text-slate-900 break-all">
+                        {generatedKey}
+                      </div>
                     )}
                   </div>
                 )}
@@ -1089,8 +1182,8 @@ export default function WorkspacePage() {
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                       <tr>
-                        <th className="py-2.5 px-3">Label</th>
-                        <th className="py-2.5 px-3 font-mono">Masked Key</th>
+                        <th className="py-2.5 px-3">Integration Label</th>
+                        <th className="py-2.5 px-3 font-mono">Token (Masked)</th>
                         <th className="py-2.5 px-3">Created</th>
                         <th className="py-2.5 px-3">Status</th>
                         <th className="py-2.5 px-3 text-right">Action</th>
@@ -1100,7 +1193,9 @@ export default function WorkspacePage() {
                       {apiKeys.map((k) => (
                         <tr key={k.id} className="hover:bg-slate-50">
                           <td className="py-2.5 px-3 font-medium text-slate-900">{k.name}</td>
-                          <td className="py-2.5 px-3 font-mono text-slate-600">{k.maskedKey}</td>
+                          <td className="py-2.5 px-3 font-mono text-slate-600">
+                            <span className="bg-slate-100 px-1.5 py-0.5 rounded">{k.maskedKey}</span>
+                          </td>
                           <td className="py-2.5 px-3 text-slate-500">
                             {new Date(k.createdAt).toLocaleDateString()}
                           </td>
@@ -1132,37 +1227,329 @@ export default function WorkspacePage() {
                 </div>
               </div>
 
-              {/* cURL Sandbox */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700 uppercase">Live REST API Sandbox</span>
+              {/* Interactive REST API Playground */}
+              <div className="pt-4 border-t border-slate-100 space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <Terminal className="h-4 w-4 text-orange-600" />
+                      <span>Live REST API Playground & Code Generator</span>
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Test real-time estimate fairness evaluation against the live <code className="font-mono">POST /api/v1/audit</code> endpoint.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg text-xs font-semibold">
+                    <button
+                      onClick={() => setCodeLang("curl")}
+                      className={`px-2.5 py-1 rounded ${
+                        codeLang === "curl" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600"
+                      }`}
+                    >
+                      cURL
+                    </button>
+                    <button
+                      onClick={() => setCodeLang("node")}
+                      className={`px-2.5 py-1 rounded ${
+                        codeLang === "node" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600"
+                      }`}
+                    >
+                      Node.js
+                    </button>
+                    <button
+                      onClick={() => setCodeLang("python")}
+                      className={`px-2.5 py-1 rounded ${
+                        codeLang === "python" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600"
+                      }`}
+                    >
+                      Python
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sandbox Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 uppercase">Trade</label>
+                    <select
+                      value={sandboxTrade}
+                      onChange={(e) => setSandboxTrade(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-800"
+                    >
+                      <option value="HVAC">HVAC</option>
+                      <option value="Plumbing">Plumbing</option>
+                      <option value="Roofing">Roofing</option>
+                      <option value="Electrical">Electrical</option>
+                      <option value="General Contracting">General Contracting</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 uppercase">City</label>
+                    <input
+                      type="text"
+                      value={sandboxCity}
+                      onChange={(e) => setSandboxCity(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs text-slate-800"
+                      placeholder="Dallas"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 uppercase">State</label>
+                    <input
+                      type="text"
+                      value={sandboxState}
+                      onChange={(e) => setSandboxState(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs text-slate-800"
+                      placeholder="TX"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 uppercase">Quoted Amount ($)</label>
+                    <input
+                      type="number"
+                      value={sandboxAmount}
+                      onChange={(e) => setSandboxAmount(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 font-mono"
+                      placeholder="4850"
+                    />
+                  </div>
+                </div>
+
+                {/* Code Snippet Box */}
+                <div className="rounded-xl bg-slate-900 border border-slate-800 overflow-hidden text-xs font-mono">
+                  <div className="px-4 py-2 bg-slate-950 border-b border-slate-800 flex items-center justify-between text-slate-400">
+                    <span>
+                      {codeLang === "curl" && "Bash / cURL"}
+                      {codeLang === "node" && "JavaScript / TypeScript (Fetch API)"}
+                      {codeLang === "python" && "Python 3 (Requests)"}
+                    </span>
+                    <button
+                      onClick={() => {
+                        const snippet =
+                          codeLang === "curl"
+                            ? `curl -X POST https://repairquote-check.sensifai.com/api/v1/audit \\\n  -H "Authorization: Bearer ${generatedKey || sandboxKey || "rq_live_..."}" \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify({ trade: sandboxTrade, city: sandboxCity, state: sandboxState, totalQuoted: Number(sandboxAmount) })}'`
+                            : codeLang === "node"
+                            ? `const res = await fetch("https://repairquote-check.sensifai.com/api/v1/audit", {\n  method: "POST",\n  headers: {\n    "Authorization": "Bearer ${generatedKey || sandboxKey || "rq_live_..."}",\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({\n    trade: "${sandboxTrade}",\n    city: "${sandboxCity}",\n    state: "${sandboxState}",\n    totalQuoted: ${sandboxAmount}\n  })\n});\nconst data = await res.json();\nconsole.log(data);`
+                            : `import requests\n\nres = requests.post(\n    "https://repairquote-check.sensifai.com/api/v1/audit",\n    headers={\n        "Authorization": "Bearer ${generatedKey || sandboxKey || "rq_live_..."}",\n        "Content-Type": "application/json",\n    },\n    json={\n        "trade": "${sandboxTrade}",\n        "city": "${sandboxCity}",\n        "state": "${sandboxState}",\n        "totalQuoted": ${sandboxAmount},\n    },\n)\nprint(res.json())`;
+                        copyToClipboard(snippet);
+                      }}
+                      className="hover:text-slate-200 inline-flex items-center gap-1 text-[11px]"
+                    >
+                      <Copy className="h-3 w-3" />
+                      <span>Copy Snippet</span>
+                    </button>
+                  </div>
+
+                  <div className="p-4 text-slate-200 overflow-x-auto">
+                    {codeLang === "curl" && (
+                      <pre>
+                        {`curl -X POST https://repairquote-check.sensifai.com/api/v1/audit \\
+  -H "Authorization: Bearer ${generatedKey || sandboxKey || "rq_live_sample_token"}" \\
+  -H "Content-Type: application/json" \\
+  -d '${JSON.stringify({ trade: sandboxTrade, city: sandboxCity, state: sandboxState, totalQuoted: Number(sandboxAmount) })}'`}
+                      </pre>
+                    )}
+                    {codeLang === "node" && (
+                      <pre>
+                        {`const response = await fetch("https://repairquote-check.sensifai.com/api/v1/audit", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer ${generatedKey || sandboxKey || "rq_live_sample_token"}",
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    trade: "${sandboxTrade}",
+    city: "${sandboxCity}",
+    state: "${sandboxState}",
+    totalQuoted: ${sandboxAmount},
+  }),
+});
+const data = await response.json();
+console.log(data);`}
+                      </pre>
+                    )}
+                    {codeLang === "python" && (
+                      <pre>
+                        {`import requests
+
+response = requests.post(
+    "https://repairquote-check.sensifai.com/api/v1/audit",
+    headers={
+        "Authorization": "Bearer ${generatedKey || sandboxKey || "rq_live_sample_token"}",
+        "Content-Type": "application/json",
+    },
+    json={
+        "trade": "${sandboxTrade}",
+        "city": "${sandboxCity}",
+        "state": "${sandboxState}",
+        "totalQuoted": ${sandboxAmount},
+    },
+)
+print(response.json())`}
+                      </pre>
+                    )}
+                  </div>
+                </div>
+
+                {/* Execute Button */}
+                <div className="flex items-center justify-between pt-1">
+                  <div className="text-xs text-slate-500">
+                    Sends live request through local Next.js API route using active token.
+                  </div>
                   <button
                     onClick={handleRunSandbox}
                     disabled={sandboxLoading}
-                    className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5"
+                    className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-sm transition-colors disabled:opacity-50"
                   >
                     {sandboxLoading ? (
-                      <RefreshCw className="h-3 w-3 animate-spin" />
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        <span>Evaluating Quote...</span>
+                      </>
                     ) : (
-                      <Terminal className="h-3 w-3" />
+                      <>
+                        <Terminal className="h-3.5 w-3.5 text-orange-400" />
+                        <span>Execute API Request</span>
+                      </>
                     )}
-                    <span>Execute cURL Request</span>
                   </button>
                 </div>
 
-                <div className="p-4 rounded-xl bg-slate-900 text-slate-100 font-mono text-xs space-y-2 overflow-x-auto">
-                  <div className="text-slate-400"># POST /api/v1/audit</div>
-                  <div>curl -X POST https://repairquote-check.sensifai.com/api/v1/audit \</div>
-                  <div className="pl-4">-H &quot;Authorization: Bearer {generatedKey || (apiKeys[0]?.maskedKey || "rq_live_...")}&quot; \</div>
-                  <div className="pl-4">-H &quot;Content-Type: application/json&quot; \</div>
-                  <div className="pl-4">-d &apos;{JSON.stringify({ trade: sandboxTrade, city: sandboxCity, totalQuoted: Number(sandboxAmount) })}&apos;</div>
-                </div>
-
+                {/* Sandbox Response Viewer */}
                 {sandboxResult && (
-                  <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-emerald-400 overflow-x-auto max-h-60">
-                    <pre>{JSON.stringify(sandboxResult, null, 2)}</pre>
+                  <div className="rounded-xl bg-slate-950 border border-slate-800 overflow-hidden space-y-0 text-xs font-mono">
+                    <div className="px-4 py-2 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            sandboxStatus === 200
+                              ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                              : "bg-rose-950 text-rose-400 border border-rose-800"
+                          }`}
+                        >
+                          HTTP {sandboxStatus || 200} OK
+                        </span>
+                        {sandboxLatency !== null && (
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            Latency: {sandboxLatency}ms
+                          </span>
+                        )}
+                        {sandboxResult.reportId && (
+                          <span className="text-[11px] text-orange-400 font-mono">
+                            {sandboxResult.reportId}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => copyToClipboard(JSON.stringify(sandboxResult, null, 2))}
+                        className="hover:text-slate-200 text-slate-400 inline-flex items-center gap-1 text-[11px]"
+                      >
+                        <Copy className="h-3 w-3" />
+                        <span>Copy JSON</span>
+                      </button>
+                    </div>
+                    <div className="p-4 text-emerald-400 overflow-x-auto max-h-72 leading-relaxed">
+                      <pre>{JSON.stringify(sandboxResult, null, 2)}</pre>
+                    </div>
                   </div>
                 )}
+              </div>
+
+              {/* Endpoints Reference Catalog */}
+              <div className="pt-6 border-t border-slate-100 space-y-3">
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Supported API Endpoints Reference
+                </span>
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                      <tr>
+                        <th className="py-2.5 px-3">Method</th>
+                        <th className="py-2.5 px-3 font-mono">Endpoint Path</th>
+                        <th className="py-2.5 px-3">Auth Header</th>
+                        <th className="py-2.5 px-3">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      <tr>
+                        <td className="py-2.5 px-3">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
+                            POST
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-900 font-semibold">
+                          /api/v1/audit
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-600">
+                          Bearer rq_live_...
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600">
+                          Evaluate quote details against regional trade medians; returns fairness score and negotiation scripts.
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 px-3">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                            GET
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-900 font-semibold">
+                          /api/v1/trades
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-500">Public</td>
+                        <td className="py-2.5 px-3 text-slate-600">
+                          List supported trades, hourly rate benchmarks, and common padded line items.
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 px-3">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                            GET
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-900 font-semibold">
+                          /api/v1/keys
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-500">Cookie / Local</td>
+                        <td className="py-2.5 px-3 text-slate-600">
+                          List application API keys (masked with status).
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 px-3">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
+                            POST
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-900 font-semibold">
+                          /api/v1/keys
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-500">Cookie / Local</td>
+                        <td className="py-2.5 px-3 text-slate-600">
+                          Mint a new dedicated application key (<code className="font-mono">rq_live_...</code>).
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 px-3">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">
+                            DELETE
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-900 font-semibold">
+                          /api/v1/keys?id=:id
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-500">Cookie / Local</td>
+                        <td className="py-2.5 px-3 text-slate-600">
+                          Revoke an active application key immediately.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>

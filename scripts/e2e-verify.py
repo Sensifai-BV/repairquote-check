@@ -1,6 +1,7 @@
 import asyncio
 import sys
 import json
+import urllib.request
 from playwright.async_api import async_playwright
 
 async def run_e2e():
@@ -59,6 +60,11 @@ async def run_e2e():
                 print(f"  ✗ {err}")
                 errors.append(err)
         print("  ✓ Plain-text cleanliness verified: 0 raw Markdown markers or broken escapes in copy")
+
+        # Verify Developer API section on landing page
+        api_section = await page.query_selector("section#api")
+        assert api_section is not None, "Developer REST API section (#api) missing on landing page!"
+        print("  ✓ Enterprise & Developer REST API section (#api) rendered on landing page")
 
         # Scroll to ensure all assets load
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
@@ -145,7 +151,6 @@ async def run_e2e():
         # Journey 5: Real OIDC Login Redirect Resolution
         # -------------------------------------------------------------
         print("\n[E2E Test 5] Verifying Real Logto OIDC PKCE Login Redirect...")
-        # Test /api/auth/login returns redirect to auth.sensifai.com/oidc/auth
         login_res = await page.request.get("http://localhost:3000/api/auth/login", max_redirects=0)
         assert login_res.status in [302, 307], f"Expected 302/307 redirect from /api/auth/login, got {login_res.status}"
         redirect_location = login_res.headers.get("location", "")
@@ -158,14 +163,12 @@ async def run_e2e():
         # Journey 6: Responsive Layout (Desktop Left Sidebar vs Mobile Bottom Bar)
         # -------------------------------------------------------------
         print("\n[E2E Test 6] Verifying Responsive Layouts & Zero Overflow...")
-        # Desktop check: Left sidebar present
         await page.set_viewport_size({"width": 1280, "height": 800})
         await page.goto("http://localhost:3000/workspace", wait_until="networkidle")
         sidebar = await page.query_selector("aside")
         assert sidebar is not None, "Desktop Left Sidebar (aside) not found at 1280px viewport!"
         print("  ✓ Desktop (1280px): Collapsible Left Sidebar & Live Wallet Card rendered")
 
-        # Mobile check: Bottom tab bar present + zero horizontal overflow
         await page.set_viewport_size({"width": 375, "height": 812})
         await page.goto("http://localhost:3000/workspace", wait_until="networkidle")
         await page.wait_for_timeout(800)
@@ -178,7 +181,145 @@ async def run_e2e():
         assert not overflow, "Mobile layout has horizontal overflow (scrollWidth > innerWidth)!"
         print("  ✓ Mobile (375px): Zero horizontal overflow verified (scrollWidth <= innerWidth)")
 
+        # -------------------------------------------------------------
+        # Journey 7: Developer API Hub & Zero-Leakage UI Playground Flow
+        # -------------------------------------------------------------
+        print("\n[E2E Test 7] Verifying Developer API Hub, Token Minting & Live Sandbox...")
+        await page.set_viewport_size({"width": 1280, "height": 900})
+        # Navigate directly to /workspace?tab=api
+        await page.goto("http://localhost:3000/workspace?tab=api", wait_until="networkidle")
+        await page.wait_for_timeout(600)
+
+        # Assert API Hub Heading & Privacy Guarantee
+        hub_header = await page.query_selector("text=Developer REST API Hub")
+        assert hub_header is not None, "Developer REST API Hub header not visible at /workspace?tab=api!"
+
+        privacy_callout = await page.query_selector("text=Strict API Key Isolation & Privacy Guarantee")
+        assert privacy_callout is not None, "Privacy & Zero-Leakage Guarantee banner missing!"
+        print("  ✓ Developer REST API Hub and Privacy Guarantee rendered in workspace")
+
+        # Mint a fresh key through UI
+        mint_input = await page.query_selector("input[placeholder*='Property Management']")
+        if mint_input:
+            await mint_input.fill("E2E Automated UI Integration Key")
+        mint_btn = await page.query_selector("button:has-text('Mint API Key')")
+        assert mint_btn is not None, "Mint API Key button missing!"
+        await mint_btn.click()
+        await page.wait_for_timeout(1000)
+
+        # Check key notice msg and key format
+        key_notice = await page.query_selector("text=Key created successfully")
+        assert key_notice is not None, "Key creation notice not shown after minting!"
+        full_token_el = await page.query_selector("div.select-all")
+        assert full_token_el is not None, "Full token display box missing!"
+        full_token_text = (await full_token_el.inner_text()).strip()
+        assert full_token_text.startswith("rq_live_"), f"Generated token does not match rq_live_ prefix: {full_token_text}"
+        assert len(full_token_text) >= 40, f"Token length invalid: {len(full_token_text)}"
+        print(f"  ✓ Minted dedicated application token via UI: {full_token_text[:12]}... (Zero Logto ID)")
+
+        # Execute Sandbox Request via UI
+        exec_btn = await page.query_selector("button:has-text('Execute API Request')")
+        assert exec_btn is not None, "Execute API Request button missing in sandbox!"
+        await exec_btn.click()
+        await page.wait_for_timeout(1500)
+
+        # Check Sandbox JSON Response Viewer
+        status_badge = await page.query_selector("text=HTTP 200 OK")
+        assert status_badge is not None, "Sandbox did not display HTTP 200 OK badge!"
+        response_box = await page.query_selector("div.text-emerald-400 pre")
+        assert response_box is not None, "Sandbox JSON response viewer not rendered!"
+        resp_text = await response_box.inner_text()
+        assert "reportId" in resp_text and "RQC-" in resp_text, f"Invalid sandbox response payload: {resp_text[:100]}"
+        assert "fairnessScore" in resp_text, "fairnessScore missing in sandbox response"
+        print("  ✓ Sandbox execution completed: HTTP 200 OK with verified RQC report payload")
+
+        # Assert ZERO Logto user ID in rendered workspace DOM
+        workspace_body = await page.inner_text("body")
+        for forbidden in ["wckiqf9jo9gs", "LOGTO_APP_SECRET", "whsec_"]:
+            assert forbidden not in workspace_body, f"FORBIDDEN internal credential '{forbidden}' leaked in UI text!"
+        print("  ✓ ZERO Logto IDs or backend secrets leaked in workspace DOM")
+
         await browser.close()
+
+    # -------------------------------------------------------------
+    # Journey 8: Direct HTTP REST API & Zero Credential Leakage Verification
+    # -------------------------------------------------------------
+    print("\n[E2E Test 8] Verifying Direct HTTP REST API Endpoints & Zero Leakage...")
+
+    # 1. GET /api/v1/trades
+    req_trades = urllib.request.Request("http://localhost:3000/api/v1/trades")
+    with urllib.request.urlopen(req_trades) as resp:
+        assert resp.status == 200, f"GET /api/v1/trades returned status {resp.status}"
+        data_trades = json.loads(resp.read().decode("utf-8"))
+        assert data_trades.get("success") is True, f"GET /api/v1/trades success is not true: {data_trades}"
+        assert data_trades.get("totalTrades") == 4, f"Expected 4 trades, got {data_trades.get('totalTrades')}"
+        print("  ✓ GET /api/v1/trades: HTTP 200 (4 supported trade domains with benchmark rates)")
+
+    # 2. POST /api/v1/keys
+    key_payload = json.dumps({"name": "Direct HTTP Client E2E Key"}).encode("utf-8")
+    req_key = urllib.request.Request("http://localhost:3000/api/v1/keys", data=key_payload, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req_key) as resp:
+        assert resp.status == 201, f"POST /api/v1/keys returned status {resp.status}"
+        data_key = json.loads(resp.read().decode("utf-8"))
+        assert data_key.get("success") is True
+        issued_key = data_key["key"]["key"]
+        issued_id = data_key["key"]["id"]
+        assert issued_key.startswith("rq_live_"), f"Key format invalid: {issued_key}"
+        print(f"  ✓ POST /api/v1/keys: HTTP 201 (Minted {issued_key[:12]}...)")
+
+    # 3. POST /api/v1/audit with issued key
+    audit_payload = json.dumps({
+        "trade": "Roofing",
+        "city": "Atlanta",
+        "state": "GA",
+        "totalQuoted": 3200
+    }).encode("utf-8")
+    req_audit = urllib.request.Request(
+        "http://localhost:3000/api/v1/audit",
+        data=audit_payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {issued_key}"
+        }
+    )
+    with urllib.request.urlopen(req_audit) as resp:
+        assert resp.status == 200, f"POST /api/v1/audit returned status {resp.status}"
+        data_audit = json.loads(resp.read().decode("utf-8"))
+        assert data_audit.get("success") is True
+        assert data_audit.get("reportId", "").startswith("RQC-")
+        assert data_audit.get("fairTotalMedian") > 0
+        assert data_audit.get("authenticatedAs") == "Direct HTTP Client E2E Key"
+        print(f"  ✓ POST /api/v1/audit: HTTP 200 ({data_audit['reportId']}, Score: {data_audit['fairnessScore']})")
+
+    # 4. Strictly audit response string for zero Logto ID leakage
+    audit_raw = json.dumps(data_audit)
+    for forbidden in ["wckiqf9jo9gs", "LOGTO", "gatekeeper"]:
+        assert forbidden not in audit_raw, f"Forbidden identity token '{forbidden}' leaked in audit response!"
+    print("  ✓ Zero Logto user ID or internal platform secrets leaked in API payloads")
+
+    # 5. DELETE /api/v1/keys?id=... (Revocation check)
+    req_del = urllib.request.Request(f"http://localhost:3000/api/v1/keys?id={issued_id}", method="DELETE")
+    with urllib.request.urlopen(req_del) as resp:
+        assert resp.status == 200
+        data_del = json.loads(resp.read().decode("utf-8"))
+        assert data_del.get("success") is True
+        print(f"  ✓ DELETE /api/v1/keys: HTTP 200 (Revoked {issued_id})")
+
+    # 6. Verify revoked key is strictly 401 Unauthorized
+    try:
+        req_audit_revoked = urllib.request.Request(
+            "http://localhost:3000/api/v1/audit",
+            data=audit_payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {issued_key}"
+            }
+        )
+        urllib.request.urlopen(req_audit_revoked)
+        assert False, "Revoked key unexpectedly passed authorization!"
+    except urllib.error.HTTPError as he:
+        assert he.code == 401, f"Expected 401 for revoked key, got {he.code}"
+        print("  ✓ Revoked key strictly rejected: HTTP 401 UNAUTHORIZED")
 
     print("\n=====================================================================")
     if errors:
@@ -187,7 +328,7 @@ async def run_e2e():
             print(f"    - {e}")
         sys.exit(1)
     else:
-        print("  ALL 6 BROWSER E2E USER JOURNEYS PASSED WITH ZERO DEFECTS!")
+        print("  ALL 8 BROWSER & HTTP E2E USER JOURNEYS PASSED WITH ZERO DEFECTS!")
     print("=====================================================================\n")
 
 if __name__ == "__main__":

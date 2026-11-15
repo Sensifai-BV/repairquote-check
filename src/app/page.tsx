@@ -21,6 +21,10 @@ import {
   Clock,
   Building2,
   Home,
+  Key,
+  Cpu,
+  Terminal,
+  Code,
 } from "lucide-react";
 
 export default function LandingPage() {
@@ -36,6 +40,7 @@ export default function LandingPage() {
           { label: "Fairness Proof", href: "#proof" },
           { label: "Capabilities", href: "#features" },
           { label: "How It Works", href: "#how-it-works" },
+          { label: "Developer API", href: "#api" },
           { label: "Pricing", href: "#pricing" },
         ]}
         ctaLabel="Audit Quote Now"
@@ -334,6 +339,114 @@ export default function LandingPage() {
             <p className="text-xs text-slate-600 leading-relaxed">
               Review padded labor flags, line-item fairness scorecards, and ready-to-use contractor questions with verified counter-offer amounts.
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Developer REST API Section */}
+      <section id="api" className="py-12 md:py-20 px-4 sm:px-6 max-w-6xl mx-auto w-full border-t border-slate-200/80">
+        <div className="text-center max-w-2xl mx-auto mb-12 space-y-2">
+          <div className="text-xs font-bold tracking-wider text-orange-700 uppercase">
+            Enterprise & Developer REST API
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">
+            Automate Quote Auditing in Your Systems
+          </h2>
+          <p className="text-sm text-slate-600">
+            Embed residential estimate fairness auditing directly into property management software, tenant portals, insurance claim desks, and warranty platforms.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <div className="lg:col-span-5 space-y-4">
+            <div className="p-5 rounded-2xl bg-white border border-slate-200/80 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center">
+                  <Key className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Dedicated Cryptographic Keys</h3>
+                  <p className="text-xs text-slate-500">App-scoped tokens (rq_live_...) with zero credential leakage.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-white border border-slate-200/80 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center">
+                  <Cpu className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Sub-Second Telemetry Execution</h3>
+                  <p className="text-xs text-slate-500">Benchmark HVAC, Plumbing, Roofing, and Electrical in milliseconds.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-white border border-slate-200/80 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center">
+                  <Terminal className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Structured JSON Output</h3>
+                  <p className="text-xs text-slate-500">Full price-band medians, padded flags, and negotiation scripts.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <Link
+                href="/workspace?tab=api"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs shadow-sm transition-colors"
+              >
+                <span>Launch API Hub & Mint Keys</span>
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </div>
+
+          <div className="lg:col-span-7 rounded-2xl bg-slate-900 text-slate-100 border border-slate-800 overflow-hidden shadow-xl">
+            <div className="h-10 bg-slate-950 border-b border-slate-800 px-4 flex items-center justify-between text-xs font-mono text-slate-400">
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-rose-500/80" />
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-500/80" />
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
+                <span className="ml-2 text-slate-300 font-semibold">POST /api/v1/audit</span>
+              </div>
+              <span className="text-[11px] text-slate-500">cURL REST Example</span>
+            </div>
+
+            <div className="p-5 font-mono text-xs space-y-4 overflow-x-auto">
+              <div>
+                <span className="text-slate-500"># Send quote details for real-time fairness evaluation</span>
+                <div className="text-orange-400 mt-1">curl -X POST https://repairquote-check.sensifai.com/api/v1/audit \</div>
+                <div className="pl-4 text-slate-300">-H &quot;Authorization: Bearer rq_live_sample_token&quot; \</div>
+                <div className="pl-4 text-slate-300">-H &quot;Content-Type: application/json&quot; \</div>
+                <div className="pl-4 text-emerald-400">-d &apos;{JSON.stringify({ trade: "HVAC", city: "Dallas", totalQuoted: 4850 }, null, 0)}&apos;</div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800">
+                <span className="text-slate-500"># Sample JSON Response (HTTP 200 OK)</span>
+                <pre className="mt-2 text-slate-300 text-[11px] leading-relaxed">
+{`{
+  "success": true,
+  "reportId": "RQC-20261115-4819",
+  "trade": "HVAC",
+  "city": "Dallas",
+  "totalQuoted": 4850,
+  "fairTotalMedian": 2450,
+  "potentialSavings": 2400,
+  "fairnessScore": 42,
+  "verdictHeadline": "Significant Price Inflation Detected (+98% Above Regional Median)",
+  "paddedFlags": [
+    { "title": "Padded Nitrogen Line Flush", "severity": "high" },
+    { "title": "Dual Capacitor 400% Markup", "severity": "medium" }
+  ]
+}`}
+                </pre>
+              </div>
+            </div>
           </div>
         </div>
       </section>

@@ -31,18 +31,20 @@ Verification and Quality Gate Report for **RepairQuote Check**.
 
 ---
 
-## 3. End-to-End (E2E) Browser Verification Suite (`scripts/e2e-verify.py`)
+## 3. End-to-End (E2E) Browser & API Verification Suite (`scripts/e2e-verify.py`)
 
-All 6 automated browser test journeys executed via Playwright against the live production build (`http://localhost:3000`):
+All 8 automated browser and HTTP test journeys executed via Playwright against the live production build (`http://localhost:3000`):
 
 | Test Journey | Status | Details |
 |---|---|---|
 | [E2E Test 1] Zero Runtime & Console Errors | **PASS** | 0 uncaught page exceptions, 0 React crashes, 0 console errors, 0 hydration mismatches on `/` and `/workspace`. |
-| [E2E Test 2] Plain-Text Copy Cleanliness & Asset Integrity | **PASS** | 0 raw Markdown markers (`**`, `###`, backticks) or broken escape sequences in rendered copy; all 6 image elements loaded with `complete === true && naturalWidth > 0`. |
+| [E2E Test 2] Plain-Text Copy Cleanliness & Asset Integrity | **PASS** | 0 raw Markdown markers (`**`, `###`, backticks) or broken escape sequences in rendered copy; `#api` section verified; all 6 image elements loaded with `complete === true && naturalWidth > 0`. |
 | [E2E Test 3] Interactive Preset Switching Flow | **PASS** | Switching between HVAC Compressor, Plumbing Water Heater, Roofing Chimney Flashing, and Electrical Panel presets dynamically updates titles, price bands, line items, and renders mandatory `<AIDisclaimer />`. |
 | [E2E Test 4] Custom Input Auth Gate Flow | **PASS** | Unauthenticated custom submissions strictly render `AuthGateCard` with Sign In prompt; direct API call to `/api/billable-action` returns `401 Unauthorized`. |
 | [E2E Test 5] Real Logto OIDC PKCE Login Redirect | **PASS** | Navigating to `/api/auth/login` returns HTTP 302/307 redirecting to live Logto endpoint `https://auth.sensifai.com/oidc/auth` with `response_type=code` and PKCE `code_challenge`. |
 | [E2E Test 6] Responsive Layouts & Zero Overflow | **PASS** | Desktop (`1280px`): Collapsible Left Sidebar and Prepaid Wallet Card rendered; Mobile (`375px`): Native Fixed Bottom Navigation Bar rendered with zero horizontal overflow (`scrollWidth <= innerWidth`). |
+| [E2E Test 7] Developer API Hub & Interactive Playground | **PASS** | Direct access to `/workspace?tab=api`; minting isolated token (`rq_live_...`); UI sandbox execution returns HTTP 200 OK with RQC report payload; 0 Logto IDs leaked in DOM. |
+| [E2E Test 8] Direct HTTP REST API & Token Lifecycle | **PASS** | `GET /api/v1/trades` (4 trades); `POST /api/v1/keys` (token minting); `POST /api/v1/audit` (HTTP 200 report); `DELETE /api/v1/keys` (revocation); revoked token strictly returns 401; 0 Logto IDs or secrets in payloads. |
 
 ---
 

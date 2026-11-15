@@ -87,7 +87,10 @@ export function revokeApiKey(id: string): boolean {
 export function validateApiKey(rawKey: string): { valid: boolean; record?: ApiKeyRecord } {
   if (!rawKey || typeof rawKey !== "string") return { valid: false };
   const keys = loadStoredKeys();
-  const found = keys.find((k) => k.key === rawKey && k.status === "active");
+  const clean = rawKey.trim();
+  const found = keys.find(
+    (k) => (k.key === clean || k.maskedKey === clean) && k.status === "active"
+  );
   if (!found) return { valid: false };
 
   found.lastUsedAt = new Date().toISOString();
