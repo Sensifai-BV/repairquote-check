@@ -128,18 +128,26 @@ export default function WorkspacePage() {
           if (data.keys.length > 0 && !sandboxKey) {
             setSandboxKey(data.keys[0].maskedKey || "");
           }
+        } else {
+          setApiKeys([]);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setApiKeys([]);
+      });
   };
 
   useEffect(() => {
-    if (activeTab === "api") {
+    if (activeTab === "api" && session?.authenticated) {
       loadApiKeys();
     }
-  }, [activeTab]);
+  }, [activeTab, session?.authenticated]);
 
   const handleCreateApiKey = async () => {
+    if (!session?.authenticated) {
+      setKeyNoticeMsg("Please sign in with your Sensifai account to generate an API key.");
+      return;
+    }
     setGeneratingKey(true);
     setKeyNoticeMsg(null);
     try {
@@ -149,8 +157,13 @@ export default function WorkspacePage() {
         body: JSON.stringify({ name: newKeyName }),
       });
       const data = await res.json();
+      if (res.status === 401) {
+        setKeyNoticeMsg("Authentication required. Please sign in with your Sensifai account.");
+        return;
+      }
       if (data.success && data.key) {
         setGeneratedKey(data.key.key);
+        setSandboxKey(data.key.key);
         setKeyNoticeMsg("Key created successfully. Copy it now; full key is displayed once.");
         loadApiKeys();
       } else {
@@ -201,6 +214,13 @@ export default function WorkspacePage() {
       setSandboxLatency(Date.now() - startMs);
       setSandboxStatus(res.status);
       setSandboxResult(data);
+      if (res.status === 200 && data.meta?.walletBalanceRemainingEur !== undefined) {
+        window.dispatchEvent(
+          new CustomEvent("sensifai_wallet_updated", {
+            detail: { balance: data.meta.walletBalanceRemainingEur, currency: "EUR" },
+          })
+        );
+      }
     } catch (err: any) {
       setSandboxLatency(Date.now() - startMs);
       setSandboxStatus(500);
@@ -1078,49 +1098,65 @@ export default function WorkspacePage() {
         {/* TAB 4: DEVELOPER API HUB */}
         {activeTab === "api" && (
           <div className="space-y-6">
-            <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-6">
-              {/* Header */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+            {!session?.authenticated ? (
+              <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-4">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-bold text-slate-900">Developer REST API Hub</h2>
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      v1.0 Active
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                      Zero Third-Party ID Exposure
-                    </span>
-                  </div>
+                  <h2 className="text-xl font-bold text-slate-900">Developer REST API Hub</h2>
                   <p className="text-xs text-slate-600 mt-1">
-                    Integrate automated contractor quote fairness evaluation directly into your property management systems, warranty claim processors, or tenant mobile apps.
+                    Sign in with your Sensifai account to generate and manage dedicated application API keys for programmatic quote auditing.
                   </p>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <a
-                    href="/api/v1/trades"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-700 transition-colors"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    <span>View /api/v1/trades</span>
-                  </a>
-                </div>
+                <AuthGateCard
+                  authenticated={false}
+                  featureTitle="Mint & Manage Developer API Keys"
+                  priceEur={0.05}
+                  primaryColor={APP_METADATA.primaryColor}
+                />
               </div>
-
-              {/* Zero-Leakage Guarantee Callout */}
-              <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200/80 flex items-start gap-3">
-                <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
-                <div className="space-y-1 text-xs">
-                  <div className="font-bold text-emerald-900">
-                    Strict API Key Isolation & Privacy Guarantee
+            ) : (
+              <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-6">
+                {/* Header */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl font-bold text-slate-900">Developer REST API Hub</h2>
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        v1.0 Active
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                        Zero Third-Party ID Exposure
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 mt-1">
+                      Integrate automated contractor quote fairness evaluation directly into your property management systems, warranty claim processors, or tenant mobile apps.
+                    </p>
                   </div>
-                  <p className="text-emerald-800 leading-relaxed">
-                    Every API key is an isolated application-scoped token (format: <code className="font-mono bg-emerald-100 px-1 py-0.5 rounded">rq_live_&lt;hex&gt;</code>). User identity IDs, OIDC client secrets, and platform master credentials are never accepted, stored, or revealed.
-                  </p>
+
+                  <div className="flex items-center gap-2">
+                    <a
+                      href="/api/v1/trades"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-700 transition-colors"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      <span>View /api/v1/trades</span>
+                    </a>
+                  </div>
                 </div>
-              </div>
+
+                {/* Zero-Leakage Guarantee Callout */}
+                <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200/80 flex items-start gap-3">
+                  <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1 text-xs">
+                    <div className="font-bold text-emerald-900">
+                      Strict API Key Isolation & Privacy Guarantee
+                    </div>
+                    <p className="text-emerald-800 leading-relaxed">
+                      Every API key is an isolated application-scoped token (format: <code className="font-mono bg-emerald-100 px-1 py-0.5 rounded">rq_live_&lt;hex&gt;</code>). User identity IDs, OIDC client secrets, and platform master credentials are never accepted, stored, or revealed.
+                    </p>
+                  </div>
+                </div>
 
               {/* API Keys Table & Minting */}
               <div className="space-y-3">
@@ -1428,10 +1464,14 @@ print(response.json())`}
                           className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             sandboxStatus === 200
                               ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                              : sandboxStatus === 402
+                              ? "bg-amber-950 text-amber-300 border border-amber-800"
                               : "bg-rose-950 text-rose-400 border border-rose-800"
                           }`}
                         >
-                          HTTP {sandboxStatus || 200} OK
+                          {sandboxStatus === 200 && `HTTP 200 OK (−€0.05)`}
+                          {sandboxStatus === 402 && `HTTP 402 PAYMENT REQUIRED (Balance Depleted)`}
+                          {sandboxStatus !== 200 && sandboxStatus !== 402 && `HTTP ${sandboxStatus || 500} ERROR`}
                         </span>
                         {sandboxLatency !== null && (
                           <span className="text-[11px] text-slate-400 font-mono">
@@ -1452,6 +1492,23 @@ print(response.json())`}
                         <span>Copy JSON</span>
                       </button>
                     </div>
+
+                    {sandboxStatus === 402 && (
+                      <div className="p-3 bg-amber-900/30 border-b border-amber-800/60 text-amber-200 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+                          <span>Prepaid wallet balance depleted or insufficient (€0.00). Top up to continue API audits.</span>
+                        </div>
+                        <a
+                          href="https://sensifai.com/marketplace"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white font-semibold text-[11px] shrink-0"
+                        >
+                          Top Up Balance
+                        </a>
+                      </div>
+                    )}
                     <div className="p-4 text-emerald-400 overflow-x-auto max-h-72 leading-relaxed">
                       <pre>{JSON.stringify(sandboxResult, null, 2)}</pre>
                     </div>
@@ -1552,9 +1609,10 @@ print(response.json())`}
                 </div>
               </div>
             </div>
-          </div>
-        )}
-      </div>
-    </AppShell>
-  );
+          )}
+        </div>
+      )}
+    </div>
+  </AppShell>
+);
 }

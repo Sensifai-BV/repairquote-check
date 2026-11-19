@@ -4,6 +4,7 @@ export const revalidate = 0;
 import { NextRequest, NextResponse } from "next/server";
 import { validateApiKey } from "@/lib/sensifai/api-keys";
 import { REPAIR_PRESETS } from "@/lib/presets";
+import { usageService } from "@/lib/sensifai/usage";
 
 export async function OPTIONS() {
   return new NextResponse(null, {
@@ -35,6 +36,51 @@ export async function POST(req: NextRequest) {
         },
         {
           status: 401,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+          },
+        }
+      );
+    }
+
+    const userId = record.userId;
+    if (!userId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "API key is not associated with an authorized user account.",
+          code: "UNAUTHORIZED_KEY",
+        },
+        {
+          status: 401,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+          },
+        }
+      );
+    }
+
+    // 1. Metered Wallet Pre-Check & Live Atomic Gatekeeper Deduction (€0.05)
+    // Strictly blocks with HTTP 402 if customer has zero or insufficient balance!
+    const deduction = await usageService.deductAndSyncWallet({
+      logtoUserId: userId,
+      operation: "api_quote_audit",
+      usageUnits: 1,
+    });
+
+    if (!deduction.success || deduction.status === 402) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            deduction.error ||
+            "Prepaid wallet balance depleted or insufficient. Please top up your Sensifai wallet to continue using the API.",
+          code: "PAYMENT_REQUIRED",
+          currentBalanceEur: deduction.wallet?.balance ?? 0,
+          topUpUrl: deduction.topUpUrl || "https://sensifai.com/marketplace",
+        },
+        {
+          status: 402,
           headers: {
             "Access-Control-Allow-Origin": "*",
           },
@@ -112,6 +158,8 @@ export async function POST(req: NextRequest) {
         meta: {
           evaluatedAt: new Date().toISOString(),
           engine: "Sensifai Vision Core (Dynamic Telemetry)",
+          walletBalanceRemainingEur: deduction.wallet?.balance ?? 0,
+          costPerAuditEur: 0.05,
           rateLimitRemaining: 119,
         },
       },

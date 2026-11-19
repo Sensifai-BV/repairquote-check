@@ -4,6 +4,7 @@ import path from "path";
 
 export interface ApiKeyRecord {
   id: string;
+  userId: string;
   name: string;
   key: string;
   maskedKey: string;
@@ -42,9 +43,17 @@ function persistKeys(keys: ApiKeyRecord[]) {
 /**
  * Generates a brand-new, cryptographically secure application API key.
  * Format: rq_live_<32 hex chars>
- * Zero personal Logto IDs, personal tokens, or hardcoded credentials.
+ * Strictly binds to the authenticated user's Logto account (userId).
+ * Zero Logto IDs are ever embedded into the key string itself.
  */
-export function createNewApiKey(name = "Home Services Quote Integration Key"): ApiKeyRecord {
+export function createNewApiKey(
+  name = "Home Services Quote Integration Key",
+  userId: string
+): ApiKeyRecord {
+  if (!userId || typeof userId !== "string" || userId.trim().length === 0) {
+    throw new Error("Cannot create API key without a valid authenticated user account.");
+  }
+
   const keys = loadStoredKeys();
   const randomBytes = crypto.randomBytes(24).toString("hex");
   const rawKey = `rq_live_${randomBytes}`;
@@ -52,6 +61,7 @@ export function createNewApiKey(name = "Home Services Quote Integration Key"): A
 
   const record: ApiKeyRecord = {
     id: `key_${crypto.randomBytes(8).toString("hex")}`,
+    userId: userId.trim(),
     name,
     key: rawKey,
     maskedKey,
@@ -65,18 +75,17 @@ export function createNewApiKey(name = "Home Services Quote Integration Key"): A
   return record;
 }
 
-export function listApiKeys(): ApiKeyRecord[] {
+export function listApiKeys(userId?: string): ApiKeyRecord[] {
   const keys = loadStoredKeys();
-  if (keys.length === 0) {
-    const defaultKey = createNewApiKey("Default Property Management Integration Key");
-    return [defaultKey];
-  }
-  return keys;
+  if (!userId) return [];
+  return keys.filter((k) => k.userId === userId);
 }
 
-export function revokeApiKey(id: string): boolean {
+export function revokeApiKey(id: string, userId?: string): boolean {
   const keys = loadStoredKeys();
-  const keyIndex = keys.findIndex((k) => k.id === id);
+  const keyIndex = keys.findIndex(
+    (k) => k.id === id && (!userId || k.userId === userId)
+  );
   if (keyIndex === -1) return false;
 
   keys[keyIndex].status = "revoked";

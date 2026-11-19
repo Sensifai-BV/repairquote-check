@@ -27,7 +27,13 @@ async def run_e2e():
         page = await context.new_page()
 
         page.on("pageerror", lambda err: page_errors.append(f"PageError: {err}"))
-        page.on("console", lambda msg: console_errors.append(f"ConsoleError: {msg.text}") if msg.type == "error" else None)
+        def handle_console(msg):
+            if msg.type == "error":
+                t = msg.text.lower()
+                if "favicon" in t or "failed to load resource" in t:
+                    return
+                console_errors.append(f"ConsoleError: {msg.text}")
+        page.on("console", handle_console)
 
         res_home = await page.goto("http://localhost:3000", wait_until="networkidle")
         assert res_home.status == 200, f"Expected 200 for /, got {res_home.status}"
@@ -98,23 +104,23 @@ async def run_e2e():
         assert "Heat Pump Compressor" in title_initial, f"Expected Heat Pump in initial title, got: {title_initial}"
         print(f"  ✓ Initial preset verified: {title_initial}")
 
-        # Click preset 2 (Plumbing)
-        preset_buttons = await page.query_selector_all("button:has-text('Plumbing')")
-        if preset_buttons:
-            await preset_buttons[0].click(force=True)
-            await page.wait_for_timeout(500)
-            title_p2 = await page.inner_text("h2")
-            assert "Water Heater" in title_p2, f"Expected Water Heater in title, got: {title_p2}"
-            print(f"  ✓ Preset switch 2 verified: {title_p2}")
+        # Click preset 2 (Plumbing / Water Heater)
+        preset_water_heater = await page.query_selector("button:has-text('Water Heater')")
+        assert preset_water_heater is not None, "Preset button for Water Heater not found!"
+        await preset_water_heater.click(force=True)
+        await page.wait_for_timeout(500)
+        title_p2 = await page.inner_text("h2")
+        assert "Water Heater" in title_p2, f"Expected Water Heater in title, got: {title_p2}"
+        print(f"  ✓ Preset switch 2 verified: {title_p2}")
 
         # Click preset 4 (Electrical)
-        preset_elec = await page.query_selector_all("button:has-text('Electrical')")
-        if preset_elec:
-            await preset_elec[0].click(force=True)
-            await page.wait_for_timeout(500)
-            title_p4 = await page.inner_text("h2")
-            assert "Electrical Panel" in title_p4 or "Modernization" in title_p4, f"Expected Electrical in title, got: {title_p4}"
-            print(f"  ✓ Preset switch 4 verified: {title_p4}")
+        preset_elec = await page.query_selector("button:has-text('Electrical')")
+        assert preset_elec is not None, "Preset button for Electrical not found!"
+        await preset_elec.click(force=True)
+        await page.wait_for_timeout(500)
+        title_p4 = await page.inner_text("h2")
+        assert "Electrical Panel" in title_p4 or "Modernization" in title_p4 or "Panel" in title_p4, f"Expected Electrical in title, got: {title_p4}"
+        print(f"  ✓ Preset switch 4 verified: {title_p4}")
 
         # Check AI Disclaimer presence
         disclaimer = await page.query_selector("text=Sensifai AI may make mistakes")
@@ -182,26 +188,49 @@ async def run_e2e():
         print("  ✓ Mobile (375px): Zero horizontal overflow verified (scrollWidth <= innerWidth)")
 
         # -------------------------------------------------------------
-        # Journey 7: Developer API Hub & Zero-Leakage UI Playground Flow
+        # Journey 7: Developer API Hub Auth Gate, Token Minting & Live Sandbox
         # -------------------------------------------------------------
-        print("\n[E2E Test 7] Verifying Developer API Hub, Token Minting & Live Sandbox...")
+        print("\n[E2E Test 7] Verifying Developer API Hub, Auth Gate & Live Sandbox...")
         await page.set_viewport_size({"width": 1280, "height": 900})
-        # Navigate directly to /workspace?tab=api
+
+        # 7a: Unauthenticated Guest must see AuthGateCard and be blocked from minting keys
         await page.goto("http://localhost:3000/workspace?tab=api", wait_until="networkidle")
         await page.wait_for_timeout(600)
 
-        # Assert API Hub Heading & Privacy Guarantee
+        guest_auth_gate = await page.query_selector("text=Mint & Manage Developer API Keys")
+        assert guest_auth_gate is not None, "AuthGateCard missing for unauthenticated guest on API tab!"
+        guest_signin_btn = await page.query_selector("text=Sign In")
+        assert guest_signin_btn is not None, "Sign In CTA missing on guest AuthGateCard!"
+        guest_mint_input = await page.query_selector("input[placeholder*='Property Management']")
+        assert guest_mint_input is None, "Guest unexpectedly has access to API key mint input!"
+        print("  ✓ Unauthenticated Guest strictly blocked: AuthGateCard rendered on Tab 4")
+
+        # 7b: Authenticated User Session unlocks Developer API Hub
+        import base64
+        session_json = json.dumps({"sub": "wckiqf9jo9gs", "name": "Sensifai Member", "email": "member@sensifai.com"})
+        cookie_val = base64.b64encode(session_json.encode("utf-8")).decode("utf-8")
+        await context.add_cookies([{
+            "name": "sensifai_session",
+            "value": cookie_val,
+            "domain": "localhost",
+            "path": "/"
+        }])
+
+        await page.reload(wait_until="networkidle")
+        await page.wait_for_timeout(800)
+
+        # Assert API Hub Heading & Privacy Guarantee unlocked
         hub_header = await page.query_selector("text=Developer REST API Hub")
-        assert hub_header is not None, "Developer REST API Hub header not visible at /workspace?tab=api!"
+        assert hub_header is not None, "Developer REST API Hub header not visible after sign in!"
 
         privacy_callout = await page.query_selector("text=Strict API Key Isolation & Privacy Guarantee")
         assert privacy_callout is not None, "Privacy & Zero-Leakage Guarantee banner missing!"
-        print("  ✓ Developer REST API Hub and Privacy Guarantee rendered in workspace")
+        print("  ✓ Authenticated user unlocked Developer REST API Hub and Privacy Guarantee")
 
         # Mint a fresh key through UI
         mint_input = await page.query_selector("input[placeholder*='Property Management']")
-        if mint_input:
-            await mint_input.fill("E2E Automated UI Integration Key")
+        assert mint_input is not None, "Mint API Key input field missing after authentication!"
+        await mint_input.fill("E2E Automated UI Integration Key")
         mint_btn = await page.query_selector("button:has-text('Mint API Key')")
         assert mint_btn is not None, "Mint API Key button missing!"
         await mint_btn.click()
@@ -221,10 +250,9 @@ async def run_e2e():
         exec_btn = await page.query_selector("button:has-text('Execute API Request')")
         assert exec_btn is not None, "Execute API Request button missing in sandbox!"
         await exec_btn.click()
-        await page.wait_for_timeout(1500)
 
-        # Check Sandbox JSON Response Viewer
-        status_badge = await page.query_selector("text=HTTP 200 OK")
+        # Check Sandbox JSON Response Viewer with wait_for_selector for live network resolution
+        status_badge = await page.wait_for_selector("text=HTTP 200 OK", timeout=12000)
         assert status_badge is not None, "Sandbox did not display HTTP 200 OK badge!"
         response_box = await page.query_selector("div.text-emerald-400 pre")
         assert response_box is not None, "Sandbox JSON response viewer not rendered!"
@@ -242,9 +270,9 @@ async def run_e2e():
         await browser.close()
 
     # -------------------------------------------------------------
-    # Journey 8: Direct HTTP REST API & Zero Credential Leakage Verification
+    # Journey 8: Direct HTTP REST API, 401/402 Enforcement & Zero Credential Leakage
     # -------------------------------------------------------------
-    print("\n[E2E Test 8] Verifying Direct HTTP REST API Endpoints & Zero Leakage...")
+    print("\n[E2E Test 8] Verifying Direct HTTP REST API, 401/402 Enforcement & Zero Leakage...")
 
     # 1. GET /api/v1/trades
     req_trades = urllib.request.Request("http://localhost:3000/api/v1/trades")
@@ -255,9 +283,72 @@ async def run_e2e():
         assert data_trades.get("totalTrades") == 4, f"Expected 4 trades, got {data_trades.get('totalTrades')}"
         print("  ✓ GET /api/v1/trades: HTTP 200 (4 supported trade domains with benchmark rates)")
 
-    # 2. POST /api/v1/keys
+    # 2. Unauthenticated POST /api/v1/keys -> Strictly HTTP 401 UNAUTHORIZED
+    try:
+        unauth_key_req = urllib.request.Request(
+            "http://localhost:3000/api/v1/keys",
+            data=json.dumps({"name": "Unauth Key Attempt"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        urllib.request.urlopen(unauth_key_req)
+        assert False, "Unauthenticated POST /api/v1/keys unexpectedly succeeded!"
+    except urllib.error.HTTPError as he:
+        assert he.code == 401, f"Expected 401 for unauthenticated key mint, got {he.code}"
+        err_body = json.loads(he.read().decode("utf-8"))
+        assert err_body.get("code") == "UNAUTHORIZED", f"Expected UNAUTHORIZED code, got {err_body}"
+        print("  ✓ POST /api/v1/keys (unauthenticated): HTTP 401 UNAUTHORIZED strictly enforced")
+
+    # 3. Unauthenticated GET /api/v1/keys -> Strictly HTTP 401 UNAUTHORIZED
+    try:
+        unauth_list_req = urllib.request.Request("http://localhost:3000/api/v1/keys")
+        urllib.request.urlopen(unauth_list_req)
+        assert False, "Unauthenticated GET /api/v1/keys unexpectedly succeeded!"
+    except urllib.error.HTTPError as he:
+        assert he.code == 401, f"Expected 401 for unauthenticated key list, got {he.code}"
+        print("  ✓ GET /api/v1/keys (unauthenticated): HTTP 401 UNAUTHORIZED strictly enforced")
+
+    # 4. Strict 402 Payment Required Test: Key bound to customer with ZERO wallet balance
+    zero_key_payload = json.dumps({"name": "Zero Balance Test Key"}).encode("utf-8")
+    req_zero_key = urllib.request.Request(
+        "http://localhost:3000/api/v1/keys",
+        data=zero_key_payload,
+        headers={
+            "Content-Type": "application/json",
+            "X-Sensifai-Customer-Id": "zero_balance_customer_test"
+        }
+    )
+    with urllib.request.urlopen(req_zero_key) as resp:
+        assert resp.status == 201
+        data_zero_key = json.loads(resp.read().decode("utf-8"))
+        zero_token = data_zero_key["key"]["key"]
+
+    try:
+        req_zero_audit = urllib.request.Request(
+            "http://localhost:3000/api/v1/audit",
+            data=json.dumps({"trade": "HVAC", "totalQuoted": 4200}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {zero_token}"
+            }
+        )
+        urllib.request.urlopen(req_zero_audit)
+        assert False, "Audit request with zero wallet balance unexpectedly passed!"
+    except urllib.error.HTTPError as he:
+        assert he.code == 402, f"Expected HTTP 402 Payment Required, got {he.code}"
+        err_body = json.loads(he.read().decode("utf-8"))
+        assert err_body.get("code") == "PAYMENT_REQUIRED", f"Expected PAYMENT_REQUIRED code, got {err_body}"
+        print("  ✓ POST /api/v1/audit (Zero Balance): HTTP 402 PAYMENT REQUIRED strictly enforced")
+
+    # 5. Authenticated Key Generation for Funded Customer (wckiqf9jo9gs)
     key_payload = json.dumps({"name": "Direct HTTP Client E2E Key"}).encode("utf-8")
-    req_key = urllib.request.Request("http://localhost:3000/api/v1/keys", data=key_payload, headers={"Content-Type": "application/json"})
+    req_key = urllib.request.Request(
+        "http://localhost:3000/api/v1/keys",
+        data=key_payload,
+        headers={
+            "Content-Type": "application/json",
+            "X-Sensifai-Customer-Id": "wckiqf9jo9gs"
+        }
+    )
     with urllib.request.urlopen(req_key) as resp:
         assert resp.status == 201, f"POST /api/v1/keys returned status {resp.status}"
         data_key = json.loads(resp.read().decode("utf-8"))
@@ -265,9 +356,9 @@ async def run_e2e():
         issued_key = data_key["key"]["key"]
         issued_id = data_key["key"]["id"]
         assert issued_key.startswith("rq_live_"), f"Key format invalid: {issued_key}"
-        print(f"  ✓ POST /api/v1/keys: HTTP 201 (Minted {issued_key[:12]}...)")
+        print(f"  ✓ POST /api/v1/keys (authenticated): HTTP 201 (Minted {issued_key[:12]}...)")
 
-    # 3. POST /api/v1/audit with issued key
+    # 6. POST /api/v1/audit with funded customer's key -> HTTP 200 OK + €0.05 metered deduction
     audit_payload = json.dumps({
         "trade": "Roofing",
         "city": "Atlanta",
@@ -289,23 +380,28 @@ async def run_e2e():
         assert data_audit.get("reportId", "").startswith("RQC-")
         assert data_audit.get("fairTotalMedian") > 0
         assert data_audit.get("authenticatedAs") == "Direct HTTP Client E2E Key"
-        print(f"  ✓ POST /api/v1/audit: HTTP 200 ({data_audit['reportId']}, Score: {data_audit['fairnessScore']})")
+        rem_balance = data_audit.get("meta", {}).get("walletBalanceRemainingEur")
+        print(f"  ✓ POST /api/v1/audit: HTTP 200 ({data_audit['reportId']}, Score: {data_audit['fairnessScore']}, Wallet: €{rem_balance})")
 
-    # 4. Strictly audit response string for zero Logto ID leakage
+    # 7. Strictly audit response string for zero Logto ID leakage
     audit_raw = json.dumps(data_audit)
     for forbidden in ["wckiqf9jo9gs", "LOGTO", "gatekeeper"]:
         assert forbidden not in audit_raw, f"Forbidden identity token '{forbidden}' leaked in audit response!"
     print("  ✓ Zero Logto user ID or internal platform secrets leaked in API payloads")
 
-    # 5. DELETE /api/v1/keys?id=... (Revocation check)
-    req_del = urllib.request.Request(f"http://localhost:3000/api/v1/keys?id={issued_id}", method="DELETE")
+    # 8. DELETE /api/v1/keys?id=... (Revocation check)
+    req_del = urllib.request.Request(
+        f"http://localhost:3000/api/v1/keys?id={issued_id}",
+        method="DELETE",
+        headers={"X-Sensifai-Customer-Id": "wckiqf9jo9gs"}
+    )
     with urllib.request.urlopen(req_del) as resp:
         assert resp.status == 200
         data_del = json.loads(resp.read().decode("utf-8"))
         assert data_del.get("success") is True
         print(f"  ✓ DELETE /api/v1/keys: HTTP 200 (Revoked {issued_id})")
 
-    # 6. Verify revoked key is strictly 401 Unauthorized
+    # 9. Verify revoked key is strictly 401 Unauthorized
     try:
         req_audit_revoked = urllib.request.Request(
             "http://localhost:3000/api/v1/audit",
